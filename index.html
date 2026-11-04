@@ -662,7 +662,7 @@ V.compras = () => {
   <div class="tblw"><table><thead><tr><th>Compra</th><th>Fecha</th><th>Proveedor</th><th>Productos</th><th>Pago</th><th class="n">Total</th><th>Estado</th><th></th></tr></thead><tbody>
   ${list.map(c => `<tr><td class="mono">${esc(c.id)}</td><td>${fmtD(c.fecha)}</td><td>${esc(c.proveedor||"—")}</td><td>${(c.lineas||[]).map(l => `${num(l.cantidad)}× ${esc(prodBy(l.producto)?.nombre || l.producto)} <span class="muted">a ${money(l.costo)}</span>`).join("<br>")}</td><td>${esc(c.forma)}</td><td class="n">${money(compraTotal(c))}</td>
     <td>${c.estado==="Pendiente de pago" ? pill("Pendiente de pago","warn") : c.estado==="Pagada" ? pill("Pagada " + (c.pagadaEl?fmtDs(c.pagadaEl):""),"good") : pill("Pagada de contado","")}</td>
-    <td>${c.estado==="Pendiente de pago" ? `<button class="btn sm" data-act="pagarCompra" data-id="${esc(c.id)}">Marcar pagada</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="8" class="empty">Todavía no hay compras registradas. Cuando llegue mercancía, usa “Registrar compra” y se sumará al inventario.</td></tr>`}
+    <td style="white-space:nowrap">${c.estado==="Pendiente de pago" ? `<button class="btn sm" data-act="pagarCompra" data-id="${esc(c.id)}">Marcar pagada</button> ` : ""}<button class="btn sm ghost danger" data-act="askDel" data-kind="comp" data-id="${esc(c.id)}">Eliminar</button></td></tr>`).join("") || `<tr><td colspan="8" class="empty">Todavía no hay compras registradas. Cuando llegue mercancía, usa “Registrar compra” y se sumará al inventario.</td></tr>`}
   </tbody></table></div>`;
 };
 async function saveCompra() {
@@ -743,7 +743,7 @@ function cliDlg(id) {
     <div class="fg"><label class="f">Cédula o NIT<input id="cC" inputmode="numeric" value="${esc(c?.id)}" ${c?"disabled":""}></label><label class="f">Nombre<input id="cN" value="${esc(c?.nombre)}"></label></div>
     <div class="fg"><label class="f">Celular<input id="cT" inputmode="tel" value="${esc(c?.celular)}"></label><label class="f">Cumpleaños<input id="cB" type="date" value="${esc(c?.cumple)}"></label></div>
     <label class="f">Dirección<input id="cD" value="${esc(c?.direccion)}"></label></div>
-    <div class="df">${c && !used ? `<button class="btn danger" data-act="delCli" data-id="${esc(c.id)}" style="margin-right:auto">Eliminar</button>` : ""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveCli" data-id="${esc(c?.id||"")}">Guardar</button></div>`);
+    <div class="df">${c ? `<button class="btn danger" data-act="askDel" data-kind="cli" data-id="${esc(c.id)}" style="margin-right:auto">Eliminar</button>` : ""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveCli" data-id="${esc(c?.id||"")}">Guardar</button></div>`);
 }
 
 /* ---------- Proveedores ---------- */
@@ -760,7 +760,29 @@ function provDlg(id) {
     <label class="f">Nombre<input id="vN" value="${esc(p?.nombre)}" ${used?"disabled":""}></label>
     <label class="f">Qué se le compra<input id="vP" value="${esc(p?.producto)}" placeholder="Ej. Jeans, Camisas"></label>
     <label class="f">Teléfono<input id="vT" inputmode="tel" value="${esc(p?.telefono)}"></label></div>
-    <div class="df">${p && !used ? `<button class="btn danger" data-act="delProv" data-id="${esc(p.id)}" style="margin-right:auto">Eliminar</button>` : ""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveProv" data-id="${esc(p?.id||"")}">Guardar</button></div>`);
+    <div class="df">${p ? `<button class="btn danger" data-act="askDel" data-kind="prov" data-id="${esc(p.id)}" style="margin-right:auto">Eliminar</button>` : ""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveProv" data-id="${esc(p?.id||"")}">Guardar</button></div>`);
+}
+
+function delDlg(kind, id) {
+  let titulo, texto, extra = "", bloqueo = "";
+  if (kind === "cli") {
+    const c = cliBy(id), nv = S.ventas.filter(v => v.clienteCedula === id).length, act = S.separes.filter(s => s.cedula === id && s.estado === "Separado");
+    titulo = `Eliminar cliente ${esc(c?.nombre || id)}`; texto = "Se borra de la lista de clientes para siempre.";
+    if (nv) extra = `<div class="note warn">Tiene ${nv} factura(s). Las facturas se conservan con su nombre, pero ya no aparecerán en su historial.</div>`;
+    if (act.length) bloqueo = `Tiene ${act.length} separe(s) activo(s) (${act.map(s => esc(s.id)).join(", ")}). Liquídalos o cancélalos antes de eliminar el cliente.`;
+  } else if (kind === "prov") {
+    const p = S.proveedores.find(x => x.id === id), cs = S.compras.filter(c => c.proveedor === p?.nombre), pend = cs.filter(c => c.estado === "Pendiente de pago");
+    titulo = `Eliminar proveedor ${esc(p?.nombre || id)}`; texto = "Se borra de la lista de proveedores para siempre.";
+    if (cs.length) extra = `<div class="note warn">Tiene ${cs.length} compra(s)${pend.length ? `, ${pend.length} pendiente(s) por pagar (${money(sum(pend, compraTotal))})` : ""}. Las compras se conservan con su nombre.</div>`;
+  } else {
+    const c = S.compras.find(x => x.id === id), inv = inventario();
+    titulo = `Eliminar compra ${esc(id)}`; texto = "Se borra para siempre y su mercancía sale del inventario, como si nunca hubiera entrado.";
+    const neg = (c?.lineas || []).filter(l => inv[l.producto] && inv[l.producto].disp - N(l.cantidad) < 0);
+    if (neg.length) extra = `<div class="note warn">${neg.map(l => `${esc(prodBy(l.producto)?.nombre)} quedará en ${num(inv[l.producto].disp - N(l.cantidad))}`).join(" · ")}: esas unidades ya se vendieron o están apartadas.</div>`;
+  }
+  openDlg(`<div class="dh"><h3>${titulo}</h3><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="db">
+    ${bloqueo ? `<div class="note bad">${bloqueo}</div>` : `<p style="margin:0">${texto}</p>${extra}<label class="f">Escribe ELIMINAR para confirmar<input id="delConf" autocomplete="off"></label>`}</div>
+    <div class="df"><button class="btn" data-act="close">Volver</button>${bloqueo ? "" : `<button class="btn danger" data-act="doDel" data-kind="${kind}" data-id="${esc(id)}">Eliminar</button>`}</div>`);
 }
 
 /* ======================= diálogo ======================= */
@@ -858,6 +880,12 @@ document.addEventListener("click", async e => {
       if (!id && cliBy(ced)) return toast(`Este cliente ya está registrado: ${cliBy(ced).nombre}.`, true);
       if (!nombre || !dir || !cel) return toast("Escribe nombre, dirección y celular.", true);
       if (await save("clientes", ced, {nombre, direccion:dir, celular:cel, cumple:$("#cB").value || "", creado: cliBy(ced)?.creado || new Date().toISOString()})) { closeDlg(); toast(id ? "Cliente actualizado." : `Cliente creado: ${nombre}.`); }
+    },
+    askDel: () => delDlg(el.dataset.kind, id),
+    doDel: async () => {
+      const k = el.dataset.kind; if ($("#delConf").value.trim().toUpperCase() !== "ELIMINAR") return toast("Escribe ELIMINAR para confirmar.", true);
+      const col = {cli:"clientes", prov:"proveedores", comp:"compras"}[k];
+      if (await remove(col, id)) { closeDlg(); toast(k === "cli" ? "Cliente eliminado." : k === "prov" ? "Proveedor eliminado." : `Compra ${id} eliminada. Su mercancía salió del inventario.`); }
     },
     delCli: async () => { if (await remove("clientes", id)) { closeDlg(); toast("Cliente eliminado."); } },
     editProv: () => provDlg(id),
