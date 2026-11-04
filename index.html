@@ -533,7 +533,7 @@ function showFactura(v, nueva) {
       <div style="margin-top:10px" class="muted">Pago: ${(v.pagos||[]).map(p => `${esc(p.forma)}${p.medio?" ("+esc(p.medio)+")":""} ${money(p.valor)}`).join(" + ")}${v.separe ? ` · Liquidación del separe ${esc(v.separe)}` : ""}</div>
       ${v.nota ? `<div style="margin-top:6px" class="muted">Nota: ${esc(v.nota)}</div>` : ""}
     </div></div>
-    <div class="df"><button class="btn" data-act="copyFactura" data-id="${esc(v.id)}">Copiar texto para WhatsApp</button>${!nueva && v.estado !== "anulada" ? `<button class="btn danger" data-act="anular" data-id="${esc(v.id)}">Anular factura</button>` : ""}${nueva ? `<button class="btn pri" data-act="close">Nueva venta</button>` : `<button class="btn pri" data-act="close">Cerrar</button>`}</div>`, "wide");
+    <div class="df"><button class="btn" data-act="copyFactura" data-id="${esc(v.id)}">Copiar texto para WhatsApp</button>${!nueva && v.estado !== "anulada" ? `<button class="btn danger" data-act="anular" data-id="${esc(v.id)}">Anular factura</button>` : ""}${!nueva ? `<button class="btn ghost danger" data-act="borrarVenta" data-id="${esc(v.id)}">Eliminar</button>` : ""}${nueva ? `<button class="btn pri" data-act="close">Nueva venta</button>` : `<button class="btn pri" data-act="close">Cerrar</button>`}</div>`, "wide");
 }
 function facturaTexto(v) {
   return `ATYPICAL CLOTHING\nFactura ${v.id} · ${fmtD(v.fecha)}\nCliente: ${v.clienteNombre}\n\n` + (v.lineas||[]).map(l => `${num(l.unidades)} x ${l.nombre || "Otro"}${l.detalle ? " (" + l.detalle + ")" : ""}: ${money(l.unidades*l.precio)}`).join("\n") + `\n\nTotal: ${money(ventaTotal(v))}\nPago: ${(v.pagos||[]).map(p => `${p.forma}${p.medio?" "+p.medio:""} ${money(p.valor)}`).join(" + ")}\n¡Gracias por tu compra!`;
@@ -810,6 +810,12 @@ document.addEventListener("click", async e => {
     verVenta: () => { const v = S.ventas.find(x => x.id === id); if (v) showFactura(v); },
     copyFactura: async () => { const v = S.ventas.find(x => x.id === id); const txt = facturaTexto(v); try { await navigator.clipboard.writeText(txt); toast("Texto copiado. Pégalo en WhatsApp."); } catch (err) { const ta = document.createElement("textarea"); ta.value = txt; ta.rows = 8; el.closest("dialog").querySelector(".db").appendChild(ta); ta.select(); toast("Selecciona y copia el texto que apareció abajo."); } },
     anular: () => anularDlg(id),
+    borrarVenta: () => { const v = S.ventas.find(x => x.id === id); openDlg(`<div class="dh"><h3>Eliminar factura ${esc(id)}</h3><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="db">
+      <p style="margin:0">Se borra para siempre, como si nunca se hubiera registrado: sale de las ventas y la mercancía vuelve al inventario. Úsalo para ventas de prueba o duplicadas; para devoluciones reales es mejor <b>Anular</b>, que deja el registro.</p>
+      ${v && v.separe ? `<div class="note warn">Esta factura es la liquidación del separe ${esc(v.separe)}. El separe seguirá apareciendo como liquidado.</div>` : ""}
+      <label class="f">Escribe ELIMINAR para confirmar<input id="delConf" autocomplete="off"></label></div>
+      <div class="df"><button class="btn" data-act="close">Volver</button><button class="btn danger" data-act="doBorrarVenta" data-id="${esc(id)}">Eliminar factura</button></div>`); },
+    doBorrarVenta: async () => { if ($("#delConf").value.trim().toUpperCase() !== "ELIMINAR") return toast("Escribe ELIMINAR para confirmar.", true); if (await remove("ventas", id)) { closeDlg(); toast(`Factura ${id} eliminada.`); } },
     doAnular: async () => { const mot = $("#anMot").value.trim(); if (!mot) return toast("Escribe el motivo de la anulación.", true); if (await patch("ventas", id, {estado:"anulada", motivo:mot, anuladaEl:new Date().toISOString()})) { closeDlg(); toast(`Factura ${id} anulada. La mercancía volvió al inventario.`); } },
     toggleSepForm: () => { UI.sepForm = !UI.sepForm; render(); },
     sepTab: () => { UI.separes.estado = el.dataset.v; render(); },
