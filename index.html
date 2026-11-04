@@ -698,8 +698,8 @@ V.inventario = () => {
   </div>
   <div class="row"><input id="fi-q" style="max-width:260px" placeholder="Buscar producto…" value="${esc(f.q)}" data-ui="inv.q">
     <div class="tabs">${[["","Todos"],["alerta","Requieren compra"],["exceso","Exceso"],["ok","Suficiente"]].map(([k,t]) => `<button data-act="invTab" data-v="${k}" class="${f.filtro===k?"on":""}">${t}</button>`).join("")}</div></div>
-  <div class="tblw"><table><thead><tr><th>Código</th><th>Producto</th><th class="n">Inicial</th><th class="n">Compras</th><th class="n">Vendido</th><th class="n">Separado</th><th class="n">Disponible</th><th class="n">Mínimo</th><th class="n">Costo</th><th class="n">Valor a costo</th><th>Semáforo</th></tr></thead><tbody>
-  ${rows.map(r => `<tr><td class="mono">${esc(r.p.id)}</td><td>${esc(r.p.nombre)}</td><td class="n">${num(r.p.cantInicial)}</td><td class="n">${num(r.comprado)}</td><td class="n">${num(r.vendido)}</td><td class="n">${num(r.separado)}</td><td class="n"><b>${num(r.disp)}</b></td><td class="n">${num(r.p.stockMin)}</td><td class="n">${money(r.p.costo)}</td><td class="n">${money(r.valCosto)}</td><td>${pill(r.sem.t, r.sem.c)}</td></tr>`).join("") || `<tr><td colspan="11" class="empty">Sin productos con este filtro.</td></tr>`}
+  <div class="tblw"><table><thead><tr><th>Código</th><th>Producto</th><th class="n">Inicial</th><th class="n">Compras</th><th class="n">Vendido</th><th class="n">Separado</th><th class="n">Disponible</th><th class="n">Mínimo</th><th class="n">Costo</th><th class="n">Valor a costo</th><th>Semáforo</th><th></th></tr></thead><tbody>
+  ${rows.map(r => `<tr><td class="mono">${esc(r.p.id)}</td><td>${esc(r.p.nombre)}</td><td class="n">${num(r.p.cantInicial)}</td><td class="n">${num(r.comprado)}</td><td class="n">${num(r.vendido)}</td><td class="n">${num(r.separado)}</td><td class="n"><b>${num(r.disp)}</b></td><td class="n">${num(r.p.stockMin)}</td><td class="n">${money(r.p.costo)}</td><td class="n">${money(r.valCosto)}</td><td>${pill(r.sem.t, r.sem.c)}</td><td style="white-space:nowrap">${r.disp !== 0 ? `<button class="btn sm" data-act="askCero" data-id="${esc(r.p.id)}" title="Poner el disponible en cero">A cero</button> ` : ""}<button class="btn sm ghost danger" data-act="askDel" data-kind="prod" data-id="${esc(r.p.id)}">Eliminar</button></td></tr>`).join("") || `<tr><td colspan="12" class="empty">Sin productos con este filtro.</td></tr>`}
   </tbody></table></div>`;
 };
 
@@ -713,13 +713,14 @@ V.productos = () => {
   </tbody></table></div>`;
 };
 function prodDlg(id) {
-  const p = id ? prodBy(id) : null; const code = p ? p.id : "P" + pad(S.productos.reduce((m, x) => Math.max(m, N(String(x.id).slice(1))), 0) + 1, 3);
+  const p = id ? prodBy(id) : null; const usados = [...S.productos.map(x => x.id), ...[...S.ventas, ...S.separes, ...S.compras].flatMap(d => (d.lineas||[]).map(l => l.producto)).filter(Boolean)];
+  const code = p ? p.id : "P" + pad(usados.reduce((m, x) => Math.max(m, N(String(x).slice(1))), 0) + 1, 3);
   openDlg(`<div class="dh"><h3>${p ? "Editar " + esc(p.nombre) : "Nuevo producto"} <span class="mono muted">${code}</span></h3><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="db">
     <div class="fg"><label class="f">Nombre<input id="pN" value="${esc(p?.nombre)}"></label><label class="f">Unidad<select id="pU">${["und","par","kg","caja"].map(u => `<option ${p?.unidad===u?"selected":""}>${u}</option>`).join("")}</select></label></div>
     <div class="fg"><label class="f">Costo de compra<input id="pC" type="number" min="0" value="${esc(p?.costo ?? "")}"></label><label class="f">Precio de venta<input id="pP" type="number" min="0" value="${esc(p?.precio || "")}"></label></div>
     <div class="fg"><label class="f">Stock mínimo<input id="pM" type="number" min="0" value="${esc(p?.stockMin ?? 5)}"></label><label class="f">Cantidad inicial<input id="pI" type="number" min="0" value="${esc(p?.cantInicial ?? 0)}"></label></div>
     <p class="muted" style="margin:0;font-size:12.5px">La cantidad inicial es el inventario con que arrancó el producto. Lo que llegue después regístralo en Compras.</p></div>
-    <div class="df"><button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveProd" data-id="${code}" data-new="${p?"":"1"}">Guardar</button></div>`);
+    <div class="df">${p ? `<button class="btn danger" data-act="askDel" data-kind="prod" data-id="${esc(p.id)}" style="margin-right:auto">Eliminar</button>` : ""}<button class="btn" data-act="close">Cancelar</button><button class="btn pri" data-act="saveProd" data-id="${code}" data-new="${p?"":"1"}">Guardar</button></div>`);
 }
 
 /* ---------- Clientes ---------- */
@@ -774,6 +775,11 @@ function delDlg(kind, id) {
     const p = S.proveedores.find(x => x.id === id), cs = S.compras.filter(c => c.proveedor === p?.nombre), pend = cs.filter(c => c.estado === "Pendiente de pago");
     titulo = `Eliminar proveedor ${esc(p?.nombre || id)}`; texto = "Se borra de la lista de proveedores para siempre.";
     if (cs.length) extra = `<div class="note warn">Tiene ${cs.length} compra(s)${pend.length ? `, ${pend.length} pendiente(s) por pagar (${money(sum(pend, compraTotal))})` : ""}. Las compras se conservan con su nombre.</div>`;
+  } else if (kind === "prod") {
+    const p = prodBy(id), nv = S.ventas.filter(v => (v.lineas||[]).some(l => l.producto === id)).length, nc = S.compras.filter(c => (c.lineas||[]).some(l => l.producto === id)).length, act = S.separes.filter(s => s.estado === "Separado" && (s.lineas||[]).some(l => l.producto === id));
+    titulo = `Eliminar producto ${esc(p?.nombre || id)}`; texto = "Se borra de Productos y del Inventario para siempre. Su código no se vuelve a usar.";
+    if (nv || nc) extra = `<div class="note warn">Aparece en ${nv} factura(s) y ${nc} compra(s). Esos documentos se conservan con su nombre, pero sus unidades ya no se contarán en ningún inventario. Si solo quieres dejar de venderlo, es mejor ponerlo en cero.</div>`;
+    if (act.length) bloqueo = `Está apartado en ${act.length} separe(s) activo(s) (${act.map(s => esc(s.id)).join(", ")}). Liquídalos o cancélalos antes de eliminar el producto.`;
   } else {
     const c = S.compras.find(x => x.id === id), inv = inventario();
     titulo = `Eliminar compra ${esc(id)}`; texto = "Se borra para siempre y su mercancía sale del inventario, como si nunca hubiera entrado.";
@@ -882,10 +888,15 @@ document.addEventListener("click", async e => {
       if (await save("clientes", ced, {nombre, direccion:dir, celular:cel, cumple:$("#cB").value || "", creado: cliBy(ced)?.creado || new Date().toISOString()})) { closeDlg(); toast(id ? "Cliente actualizado." : `Cliente creado: ${nombre}.`); }
     },
     askDel: () => delDlg(el.dataset.kind, id),
+    askCero: () => { const r = inventario()[id]; if (!r) return; openDlg(`<div class="dh"><h3>Poner en cero ${esc(r.p.nombre)}</h3><button class="x" data-act="close" aria-label="Cerrar">×</button></div><div class="db">
+      <p style="margin:0">El disponible pasa de <b>${num(r.disp)}</b> a <b>0</b>. Se ajusta la cantidad inicial (de ${num(r.p.cantInicial)} a ${num(N(r.p.cantInicial) - r.disp)}); las ventas, compras y separes no cambian.</p>
+      <p class="muted" style="margin:0;font-size:12.5px">Úsalo después de un conteo físico o para sacar un producto que ya no hay en bodega.</p></div>
+      <div class="df"><button class="btn" data-act="close">Volver</button><button class="btn pri" data-act="doCero" data-id="${esc(id)}">Poner en cero</button></div>`); },
+    doCero: async () => { const r = inventario()[id]; if (!r) return; if (await patch("productos", id, {cantInicial: N(r.p.cantInicial) - r.disp})) { closeDlg(); toast(`${r.p.nombre}: disponible en 0.`); } },
     doDel: async () => {
       const k = el.dataset.kind; if ($("#delConf").value.trim().toUpperCase() !== "ELIMINAR") return toast("Escribe ELIMINAR para confirmar.", true);
-      const col = {cli:"clientes", prov:"proveedores", comp:"compras"}[k];
-      if (await remove(col, id)) { closeDlg(); toast(k === "cli" ? "Cliente eliminado." : k === "prov" ? "Proveedor eliminado." : `Compra ${id} eliminada. Su mercancía salió del inventario.`); }
+      const col = {cli:"clientes", prov:"proveedores", comp:"compras", prod:"productos"}[k];
+      if (await remove(col, id)) { closeDlg(); toast(k === "cli" ? "Cliente eliminado." : k === "prov" ? "Proveedor eliminado." : k === "prod" ? `Producto ${id} eliminado del inventario.` : `Compra ${id} eliminada. Su mercancía salió del inventario.`); }
     },
     delCli: async () => { if (await remove("clientes", id)) { closeDlg(); toast("Cliente eliminado."); } },
     editProv: () => provDlg(id),
